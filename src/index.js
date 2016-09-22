@@ -16,9 +16,8 @@ import CFG from "../cfg";
 
 import World from "./models/World";
 
-import pngjs from "pngjs";
-
 import * as _api from "./api";
+import * as _commands from "./commands";
 import * as _dump from "./dump";
 import * as _http from "./http";
 import * as _setup from "./setup";
@@ -49,8 +48,6 @@ export default class GameServer {
 
     this.db = null;
 
-    this.hash = null;
-    this.claim = null;
     this.repository = null;
 
     this.apiClients = {};
@@ -70,40 +67,17 @@ export default class GameServer {
     if (CFG.GREET) this.greet();
 
     this.getLatestVersion().then((latest) => {
-      this.loadProtoBinary().then(() => {
-        let current = require("../package.json").version;
-        print(`Booting Server v${current}`, 33);
-        //print(`Repository: https://github.com/${this.repository}`, 33);
-        if (current < latest) {
-          print(`WARNING: Please update to the latest build v${latest}!`, 33);
-        }
-        this.setup().then(() => {
-          this.world = new World(this);
-        });
+      print(this.repository);
+      let current = require("../package.json").version;
+      print(`Booting Server v${current}`, 33);
+      if (current < latest) {
+        print(`WARNING: Please update to the latest build v${latest}!`, 33);
+      }
+      this.setup().then(() => {
+        this.world = new World(this);
       });
     });
 
-  }
-
-  loadProtoBinary() {
-    return new Promise((resolve) => {
-      let opt = { filterType: -1 };
-      let decode = pngjs.PNG.sync.read(
-        fs.readFileSync("proto.bin"), opt
-      );
-      let data = decode.data;
-      let content = "";
-      let ii = 0;
-      let length = data.length;
-      for (; ii < length; ii += 4) {
-        if (data[ii]) {
-          content += String.fromCharCode(data[ii]);
-        } else break;
-      };
-      this.hash = JSON.parse(Buffer.from(content, "base64").toString()).value;
-      this.claim = CFG.PROJECT_REPOSITORY;
-      resolve(print(deXOR(this.hash, getHashCodeFrom(this.claim))));
-    });
   }
 
   fetchVersioningUrl() {
@@ -219,6 +193,7 @@ export default class GameServer {
 }
 
 inherit(GameServer, _api);
+inherit(GameServer, _commands);
 inherit(GameServer, _dump);
 inherit(GameServer, _http);
 inherit(GameServer, _setup);

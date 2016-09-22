@@ -4,8 +4,7 @@ import print from "./print";
 import CFG from "../cfg";
 
 import {
-  _toCC,
-  validUsername
+  _toCC
 } from "./utils";
 
 /**
@@ -44,7 +43,9 @@ export function processResponse(player, req) {
         case "GET_PLAYER":
         case "GET_INVENTORY":
         case "RELEASE_POKEMON":
+        case "UPGRADE_POKEMON":
         case "GET_ASSET_DIGEST":
+        case "NICKNAME_POKEMON":
         case "GET_HATCHED_EGGS":
         case "LEVEL_UP_REWARDS":
         case "GET_PLAYER_PROFILE":

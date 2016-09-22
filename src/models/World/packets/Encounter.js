@@ -5,7 +5,18 @@ import POGOProtos from "pokemongo-protobuf";
  */
 export default function Encounter(msg) {
 
-  let encounter = msg.player.currentEncounter || this.getEncounterById(msg.encounter_id);
+  let player = msg.player;
+
+  // Try to use cached encounter
+  let encounter = player.currentEncounter;
+
+  // Dont use cached encounter
+  if (
+    encounter === null ||
+    encounter.uid !== parseInt(msg.encounter_id)
+  ) {
+    encounter = this.getEncounterById(msg.encounter_id);
+  }
 
   let buffer = {
     status: "ENCOUNTER_SUCCESS",
@@ -17,17 +28,19 @@ export default function Encounter(msg) {
 
   // Invalid pkmn
   if (!encounter) {
-    msg.player.currentEncounter = null;
+    player.currentEncounter = null;
     buffer.status = "ENCOUNTER_NOT_FOUND";
   }
   // Already encountered
-  else if (encounter.alreadyCatchedBy(msg.player)) {
+  else if (encounter.alreadyCatchedBy(player)) {
     buffer.status = "ENCOUNTER_ALREADY_HAPPENED";
   }
   // Encounter success
   else {
-    msg.player.currentEncounter = encounter;
+    player.currentEncounter = encounter;
+    encounter.seenBy(player);
     buffer.wild_pokemon = encounter.serializeWild();
+    buffer.wild_pokemon.pokemon_data.cp = encounter.getSeenCp(player);
   }
 
   return (

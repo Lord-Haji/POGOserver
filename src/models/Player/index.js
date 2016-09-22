@@ -4,8 +4,9 @@ import Bag from "./Bag";
 import Info from "./Info";
 import Party from "./Party";
 import Avatar from "./Avatar";
-import CandyBag from "./CandyBag";
+import Pokedex from "./PokeDex";
 import Contact from "./Contact";
+import CandyBag from "./CandyBag";
 import Tutorial from "./Tutorial";
 import Currency from "./Currency";
 
@@ -20,6 +21,8 @@ import {
   inherit,
   parseSignature
 } from "../../utils";
+
+import ENUM from "../../enum";
 
 import { GAME_MASTER } from "../../shared";
 
@@ -64,17 +67,16 @@ export default class Player extends MapObject  {
     this.currentEncounter = null;
 
     this.bag = new Bag(this);
-    this.candyBag = new CandyBag(this);
 
     this.info = new Info(this);
     this.party = new Party(this);
     this.avatar = new Avatar(this);
+    this.pokeDex = new Pokedex(this);
     this.contact = new Contact(this);
+    this.candyBag = new CandyBag(this);
     this.tutorial = new Tutorial(this);
     this.currency = new Currency(this);
-    /*
-    this.pokedex = new Pokedex(this);
-    */
+
     this.refreshSocket(obj.request, obj.response);
 
   }
@@ -96,6 +98,19 @@ export default class Player extends MapObject  {
 
   /**
    * @param {Request} req
+   * @param {String} type
+   * @return {Boolean}
+   */
+  requestContains(req, type) {
+    let requests = req.requests;
+    for (let request of requests) {
+      if (request.request_type === type) return (true);
+    };
+    return (false);
+  }
+
+  /**
+   * @param {Request} req
    * @param {Response} res
    */
   refreshSocket(req, res) {
@@ -103,6 +118,20 @@ export default class Player extends MapObject  {
     this.response = res;
     // Try to update players position on each req
     this.refreshPosition();
+  }
+
+  refreshPosition() {
+    let req = this.request;
+    if (
+      req.latitude !== void 0 &&
+      req.longitude !== void 0
+    ) {
+      this.latitude = req.latitude;
+      this.longitude = req.longitude;
+    }
+    if (this.requestContains(req, "GET_MAP_OBJECTS")) {
+      this.world.triggerSpawnAt(this.latitude, this.longitude);
+    }
   }
 
   getDevicePlatform() {
@@ -133,7 +162,12 @@ export default class Player extends MapObject  {
           resolve(this.LevelUpRewards(msg));
         break;
         case "RELEASE_POKEMON":
-          resolve(this.ReleasePokemon(msg));
+          this.ReleasePokemon(msg).then((result) => {
+            resolve(result);
+          });
+        break;
+        case "UPGRADE_POKEMON":
+          resolve(this.UpgradePokemon(msg));
         break;
         case "GET_PLAYER_PROFILE":
           resolve(this.GetPlayerProfile(msg));
@@ -149,6 +183,9 @@ export default class Player extends MapObject  {
         break;
         case "GET_ASSET_DIGEST":
           resolve(this.GetAssetDigest(msg));
+        break;
+        case "NICKNAME_POKEMON":
+          resolve(this.NicknamePokemon(msg));
         break;
         case "GET_HATCHED_EGGS":
           resolve(this.GetHatchedEggs(msg));
@@ -249,41 +286,45 @@ export default class Player extends MapObject  {
     });
   }
 
-  refreshPosition() {
-    let req = this.request;
-    if (
-      req.latitude !== void 0 &&
-      req.longitude !== void 0
-    ) {
-      this.latitude = req.latitude;
-      this.longitude = req.longitude;
-    }
-    this.world.triggerSpawnAt(this.latitude, this.longitude);
+  /**
+   * @param {Fort} fort
+   */
+  consumeFortRewards(fort) {
+    let rewards = fort.rewards;
+    for (let key in rewards) {
+      let name = ENUM.getNameById(ENUM.ITEMS, key << 0).replace("ITEM_", "").toLowerCase();
+      if (this.bag.hasOwnProperty(name)) {
+        this.bag[name] += rewards[key] << 0;
+      }
+    };
   }
 
   /**
    * @param {WildPokemon} pkmn
    * @param {String} ball
-   * @return {Object}
    */
   catchPkmn(pkmn, ball) {
     this.info.exp += 100;
     this.info.stardust += 100;
     this.info.pkmnCaptured += 1;
     this.currentEncounter = null;
-    pkmn.owner = this;
-    pkmn.calcStats();
-    pkmn.catchedBy(this);
+    pkmn.caughtBy(this);
     pkmn.pokeball = ball;
     return new Promise((resolve) => {
+      pkmn.owner = this;
       pkmn.insertIntoDatabase().then((insertId) => {
-        print(insertId, 36);
-        pkmn.uid = pkmn.insertId;
-        let partyPkmn = this.party.addPkmn(pkmn);
-        print(`${this.username} catched a wild ${pkmn.getPkmnName()}!`);
+        let cp = pkmn.getSeenCp(this);
+        pkmn.isOwned = false;
+        pkmn = this.party.addPkmn(pkmn);
+        pkmn.isWild = false;
+        pkmn.isOwned = true;
+        pkmn.cp = cp;
+        pkmn.uid = insertId;
+        pkmn.addCandies(3);
+        print(`${this.username} caught a wild ${pkmn.getPkmnName()}!`);
         resolve({
           status: "CATCH_SUCCESS",
-          captured_pokemon_id: partyPkmn.uid,
+          captured_pokemon_id: pkmn.uid,
           capture_award: {
             activity_type: ["ACTIVITY_CATCH_POKEMON"],
             xp: [100],
@@ -291,6 +332,19 @@ export default class Player extends MapObject  {
             stardust: [100]
           }
         });
+      });
+    });
+  }
+
+  /**
+   * @param {WildPokemon} pkmn
+   */
+  releasePkmn(pkmn) {
+    pkmn.addCandies(3);
+    this.party.deletePkmn(pkmn.uid);
+    return new Promise((resolve) => {
+      pkmn.deleteFromDatabase().then(() => {
+        resolve();
       });
     });
   }

@@ -22,15 +22,21 @@ export default class WildPokemon extends Pokemon {
 
     this.encounterId = this.getEncounterId();
 
+    this.despawnIn = -1;
+    this.isDespawned = false;
+
     this.minExpire = obj.minExpire;
     this.maxExpire = obj.maxExpire;
 
     this.creation = +new Date();
 
-    this.expiration = ~~(Math.random() * this.maxExpire) + this.minExpire;
+    this.expiration = (Math.floor((Math.random() * this.maxExpire) + this.minExpire) * 1e3);
 
-    // players who already catched this pkmn
+    // players who already caught this pkmn
     this.hasCatched = [];
+
+    // players who already have seen this pkmn (to store cp)
+    this.hasSeen = [];
 
   }
 
@@ -38,7 +44,7 @@ export default class WildPokemon extends Pokemon {
    * @param {Player} player
    * @return {Boolean}
    */
-  catchedBy(player) {
+  caughtBy(player) {
     if (!this.alreadyCatchedBy(player)) {
       this.hasCatched.push(player.uid);
     }
@@ -55,11 +61,47 @@ export default class WildPokemon extends Pokemon {
   }
 
   /**
+   * @param {Player} player
+   * @return {Number}
+   */
+  getSeenCp(player) {
+    for (let item of this.hasSeen) {
+      if (item.uid === player.uid) return (item.cp);
+    };
+    return (-1);
+  }
+
+  /**
+   * @param {Player} player
+   * @return {Boolean}
+   */
+  seenBy(player) {
+    if (!this.alreadySeenBy(player)) {
+      this.calcStats(player);
+      this.hasSeen.push({
+        cp: this.cp,
+        uid: player.uid
+      });
+    }
+  }
+
+  /**
+   * @param {Player} player
+   * @return {Boolean}
+   */
+  alreadySeenBy(player) {
+    for (let item of this.hasSeen) {
+      if (item.uid === player.uid) return (true);
+    };
+    return (false);
+  }
+
+  /**
    * @return {Boolean}
    */
   isExpired() {
     return (
-      ((this.creation + this.expiration) - +new Date()) <= 0
+      +new Date() - this.creation >= this.expiration
     );
   }
 
@@ -85,13 +127,13 @@ export default class WildPokemon extends Pokemon {
   serializeWild() {
     return ({
       encounter_id: this.encounterId,
-      last_modified_timestamp_ms: +new Date(),
+      last_modified_timestamp_ms: this.creation,
       latitude: this.latitude,
       longitude: this.longitude,
       spawn_point_id: this.spawnPointId,
       pokemon_data: {
         pokemon_id: this.getPkmnId(),
-        cp: 66,
+        cp: this.cp,
         stamina: 10,
         stamina_max: 10,
         move_1: "BUG_BITE_FAST",

@@ -7,13 +7,14 @@ import Settings from "../../modes";
 import {
   _toCC,
   inherit,
-  validName,
-  deCapitalize
+  deCapitalize,
+  validUsername
 } from "../../utils";
 
 import print from "../../print";
 
 import CFG from "../../../cfg";
+import ENUM from "../../enum";
 
 import * as _calc from "./calc";
 import * as _actions from "./action";
@@ -39,7 +40,7 @@ export default class Pokemon extends MapObject {
     this.capturedLevel = 0;
 
     this.cp = 0;
-    this.cpMultiplier = Math.random();
+    this.cpMultiplier = Math.random() + 1.0;
     this.addCpMultiplier = 0;
 
     this.move1 = 0;
@@ -65,6 +66,7 @@ export default class Pokemon extends MapObject {
     this.pokeball = null;
 
     this.isWild = false;
+    this.isOwned = false;
 
     this.spawnPoint = null;
 
@@ -77,7 +79,6 @@ export default class Pokemon extends MapObject {
   }
   set level(value) {
     this._level = parseFloat(value);
-    this.calcStats();
   }
 
   /**
@@ -101,10 +102,23 @@ export default class Pokemon extends MapObject {
       else if (key === "move_2") {
         this.move2 = obj[key];
       }
+      else if (key === "height_m") {
+        this.height = obj[key];
+      }
+      else if (key === "weight_kg") {
+        this.weight = obj[key];
+      }
+      else if (key === "individual_attack") {
+        this.ivAttack = obj[key];
+      }
+      else if (key === "individual_defense") {
+        this.ivDefense = obj[key];
+      }
+      else if (key === "individual_stamina") {
+        this.ivStamina = obj[key];
+      }
     };
-    if (!obj.isWild) {
-      this.calcStats();
-    }
+    if (!obj.isWild && !obj.isOwned) this.calcStats(this.owner);
   }
 
   /**
@@ -128,8 +142,9 @@ export default class Pokemon extends MapObject {
    * @param {String} name
    */
   setNickname(name) {
-    if (!validName(name)) return void 0;
-    this.nickname = name;
+    if (validUsername(name)) {
+      this.nickname = name;
+    }
   }
 
   /**
@@ -151,6 +166,25 @@ export default class Pokemon extends MapObject {
   }
 
   /**
+   * @param {Number} dex
+   * @return {String}
+   */
+  getPkmnFamily(dex) {
+    return (
+      this.getPkmnTemplate(dex).family_id
+    );
+  }
+
+  /**
+   * @param {Number} amount
+   */
+  addCandies(amount) {
+    let family = this.getPkmnFamily(this.dexNumber);
+    let id = ENUM.getIdByName(ENUM.POKEMON_FAMILY, family) << 0;
+    if (this.owner) this.owner.candyBag.addCandy(id, parseInt(amount));
+  }
+
+  /**
    * @return {Boolean}
    */
   hasEvolution() {
@@ -166,13 +200,6 @@ export default class Pokemon extends MapObject {
   candiesToEvolve() {
     let pkmnTmpl = this.getPkmnTemplate(this.dexNumber);
     return (pkmnTmpl.candy_to_evolve << 0);
-  }
-
-  /**
-   * @return {Number}
-   */
-  candiesToPowerUp() {
-    return (1337);
   }
 
   /**
@@ -220,6 +247,16 @@ export default class Pokemon extends MapObject {
     });
   }
 
+  deleteFromDatabase() {
+    let query = `DELETE FROM ${CFG.MYSQL_OWNED_PKMN_TABLE} WHERE id=? AND owner_id=? LIMIT 1`;
+    return new Promise((resolve) => {
+      this.owner.world.db.query(query, [this.uid, this.owner.uid], (e, res) => {
+        if (e) return print(e, 31);
+        resolve(res);
+      });
+    });
+  }
+
   /**
    * @return {Object}
    */
@@ -240,8 +277,9 @@ export default class Pokemon extends MapObject {
       cp_multiplier: this.cpMultiplier,
       pokeball: "ITEM_POKE_BALL",
       captured_cell_id: "1337",
-      creation_time_ms: +new Date() - 1e3,
-      favorite: this.favorite
+      creation_time_ms: +new Date(),
+      favorite: this.favorite,
+      nickname: this.nickname
     });
   }
 
